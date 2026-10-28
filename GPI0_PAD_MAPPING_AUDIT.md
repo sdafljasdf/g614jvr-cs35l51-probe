@@ -1,8 +1,9 @@
 # GPI0 pad mapping and read-only observer audit
 
-**Status: static mapping established; live read not performed.** The existing
-probe remains passive, and no GPIO-read transport or user client is deployed.
-The included decoder accepts synthetic input only and performs no I/O.
+**Status: static mapping established; live read not performed.** An isolated
+passive observer and its supervised, fixed one-shot user client are now built
+and tested. They are candidates for deployment, not evidence of live pad
+values. The independent SPI probe remains unpublished and undeployed.
 
 ## Platform and resource evidence
 
@@ -52,22 +53,30 @@ source. This supports the proposed investigation; it does not document the
 macOS provider's power or access contract, map resources on macOS, or prove
 the target registers have no side effects under every platform state.
 
-## Why live G0 / A0 remain blocked
+## Observer readiness and remaining runtime gates
 
-There is no installed, verified, read-only macOS interface that maps this
-resource and reads only the intended registers. The existing candidate is
-passive, and its old generic GPIO implementation includes write paths and
-assumptions which do not satisfy this observer's constraints. An idle-sleep
-assertion is also not yet implemented. Creating an ad-hoc kernel mapping or
-reusing the old SPI code would not establish safe access; no such access was
-attempted. Additionally a read made once cannot guarantee CS1 stays high
-until a later SPI transaction without an established stability/ownership
-contract. SPI3's independent power lifecycle remains unresolved.
+The dedicated observer described in `GPI0_OBSERVER_AUDIT.md` now implements
+a root-only fixed synchronous user client, local read-only uncached mapping,
+and a separate supervisor with a system-enforced finite idle-sleep assertion.
+It does not reuse the old generic GPIO writer. These implementation and
+publication gates permit an observer artifact before the first physical
+sample; they do not assert that this hardware has already been read.
 
-The offline decoder distinguishes TX latch from RX state; when input is
-disabled, RX is unknown. It deliberately never sets `cs1_deselected_now`,
-because supplied values do not establish physical line voltage, ownership or
-stability. No CS0 or CS1 transfer is permitted by this work.
+The live worker distinguishes TX latch from RX state; when input is disabled,
+RX is unknown. `CS1_DESELECTED_NOW=YES` is only a sampled GPIO-mode, TX-enabled,
+high-latch and ownership predicate. It is not a measured pin voltage or a
+lease guaranteeing that no other actor can change the pad later. The offline
+decoder remains synthetic-only and provides no permission for SPI access.
+SPI3's independent ownership and power-lifetime gates still apply to A0.
+No CS0 or CS1 transfer is performed by the observer.
+
+Deployment has an additional host-specific gate: the current shared Kingston
+EFI failed normal read-only mounting, and an offline `fsck_msdos -n` of its
+unchanged raw backup reports five overallocated Spotlight index-file chains.
+No EFI repair or observer injection was performed. The observer artifact is
+ready for its controlled validation; this discovered filesystem issue must
+be resolved before modifying that shared EFI. This is separate from the
+observer's publication gate and does not require a rescue USB specifically.
 
 Sources: https://github.com/torvalds/linux/blob/65ba8f34ec886ec72b2c07ddc8cf3d815c32869d/drivers/pinctrl/intel/pinctrl-alderlake.c
 and https://github.com/torvalds/linux/blob/65ba8f34ec886ec72b2c07ddc8cf3d815c32869d/drivers/pinctrl/intel/pinctrl-intel.c
