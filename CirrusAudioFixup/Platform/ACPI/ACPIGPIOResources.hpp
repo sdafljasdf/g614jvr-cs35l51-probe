@@ -8,6 +8,7 @@ namespace cirrus::transport {
 struct ACPIGPIOResource {
     uint16_t pin{0};
     uint8_t sourceIndex{0};
+    uint8_t pull{0};
     char source[128]{};
 };
 inline bool parseACPIGPIOResource(const uint8_t* data, size_t length, uint32_t resourceIndex, uint32_t pinIndex, ACPIGPIOResource& output,
@@ -62,6 +63,7 @@ inline bool parseACPIGPIOResource(const uint8_t* data, size_t length, uint32_t r
             }
             parsed.pin = le16(d + pins + pinIndex * 2);
             parsed.sourceIndex = d[16];
+            parsed.pull = d[9];
             found = true;
         }
         offset += size;

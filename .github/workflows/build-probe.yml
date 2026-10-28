@@ -25,10 +25,21 @@ jobs:
           clang++ -std=c++17 -Wall -Wextra -Werror Research/G614JVR/ChipSelectPolicyTest.cpp -o "$RUNNER_TEMP/cs-policy-test"
           "$RUNNER_TEMP/cs-policy-test"
           node --test Research/G614JVR/family_probe_policy.test.mjs
+      - name: Compile dedicated probe target (unpublished candidate)
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -project G614JVRProbe.xcodeproj -target G614JVRProbe -configuration Debug \
+            -sdk macosx ARCHS=x86_64 CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            CONFIGURATION_BUILD_DIR="$GITHUB_WORKSPACE/build/Probe" build 2>&1 | tee "$RUNNER_TEMP/probe-build.log"
+          BUNDLE="$GITHUB_WORKSPACE/build/Probe/G614JVRProbe.kext"
+          plutil -lint "$BUNDLE/Contents/Info.plist"
+          lipo "$BUNDLE/Contents/MacOS/G614JVRProbe" -verify_arch x86_64
+          python3 Tools/Build/verify_kext_vtables.py "$BUNDLE/Contents/MacOS/G614JVRProbe"
       - name: Enforce probe-only build gate
         run: |
-          echo 'FAIL CLOSED: no reviewed probe-only kext target or audited native-CS transport is integrated.'
-          echo 'Refusing to publish the ordinary driver as a probe.'
+          echo 'FAIL CLOSED: dedicated target is an unreviewed candidate; lifecycle and write audit remain incomplete.'
+          echo 'No kext artifact will be published or deployed.'
           exit 1
       # Intentionally no kext artifact: delete this guard only after implementing
       # and auditing the real dedicated probe target and its complete call graph.

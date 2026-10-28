@@ -1,7 +1,7 @@
 // Linux regmap-compatible identity read frames. No hardware interface.
 #pragma once
-#include <cstdint>
-#include <cstddef>
+#include <stdint.h>
+#include <stddef.h>
 namespace g614jvr_probe {
 struct IdentityFrame {
     uint8_t bytes[10]{}; // 4-byte BE address + 2 padding + 4 receive clocks

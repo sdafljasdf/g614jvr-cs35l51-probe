@@ -83,13 +83,15 @@ public:
 
     // Caller must hold exclusive ownership of the controller and serialize
     // initialize/exchange/suspend/resume/shutdown, including power transitions.
-    explicit LPSSSPIEngine(RegisterWindow& window) : mWindow(window) {}
+    explicit LPSSSPIEngine(RegisterWindow& window, bool allowControllerReset = true)
+        : mWindow(window), mAllowControllerReset(allowControllerReset) {}
 
     uint32_t initialCapabilities() const { return mInitialCapabilities; }
     uint32_t initialStatus() const { return mInitialStatus; }
     uint32_t initialClock() const { return mSavedClock; }
     uint32_t preparedClock() const { return mPreparedClock; }
     uint32_t initialClockGate() const { return mSavedGate; }
+    bool allowsControllerReset() const { return mAllowControllerReset; }
     IOReturn initialize(LPSSSPIProfile profile = {LPSSSPIFamily::CannonLake, kRootClockHz, true, true, 0x300}) {
         if (mInitialized)
             return kIOReturnBusy;
@@ -408,6 +410,8 @@ private:
         if (reset == 0xffffffffU || clock == 0xffffffffU)
             return kIOReturnNoDevice;
         if ((reset & 3U) != 3U) {
+            if (!mAllowControllerReset)
+                return kIOReturnNotReady;
             mResetChanged = true;
             mWindow.write32(kReset, reset | 3U);
             if ((mWindow.read32(kReset) & 3U) != 3U)
@@ -514,6 +518,7 @@ private:
     uint32_t mInitialCapabilities{0}, mInitialStatus{0};
     LPSSSPIProfile mProfile{LPSSSPIFamily::CannonLake, kRootClockHz, true, true, 0x300};
     RegisterWindow& mWindow;
+    const bool mAllowControllerReset;
     bool mInitialized{false}, mOnline{false}, mTouched{false};
     bool mClockChanged{false}, mResetChanged{false};
     uint32_t mSelectCount{0}, mActualClockHz{0};

@@ -1,0 +1,36 @@
+// !$*UTF8*$!
+{
+ archiveVersion = 1;
+ classes = {};
+ objectVersion = 56;
+ objects = {
+  A00000000000000000000001 = {isa = PBXBuildFile; fileRef = A00000000000000000000002; };
+  A00000000000000000000002 = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = KernelProbe/G614JVRProbe.cpp; sourceTree = "<group>"; };
+  A00000000000000000000003 = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = G614JVRProbe.kext; sourceTree = BUILT_PRODUCTS_DIR; };
+  A00000000000000000000004 = {isa = PBXGroup; children = (A00000000000000000000002, A00000000000000000000005,); sourceTree = "<group>"; };
+  A00000000000000000000005 = {isa = PBXGroup; children = (A00000000000000000000003,); name = Products; sourceTree = "<group>"; };
+  A00000000000000000000006 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A00000000000000000000001,); runOnlyForDeploymentPostprocessing = 0; };
+  A00000000000000000000007 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+  A00000000000000000000008 = {isa = PBXNativeTarget; buildConfigurationList = A0000000000000000000000C; buildPhases = (A00000000000000000000006, A00000000000000000000007,); buildRules = (); dependencies = (); name = G614JVRProbe; productName = G614JVRProbe; productReference = A00000000000000000000003; productType = "com.apple.product-type.kernel-extension"; };
+  A00000000000000000000009 = {isa = PBXProject; attributes = {BuildIndependentTargetsInParallel = 1; LastUpgradeCheck = 1600;}; buildConfigurationList = A0000000000000000000000B; compatibilityVersion = "Xcode 14.0"; developmentRegion = en; hasScannedForEncodings = 0; mainGroup = A00000000000000000000004; productRefGroup = A00000000000000000000005; projectDirPath = ""; projectRoot = ""; targets = (A00000000000000000000008,); };
+  A0000000000000000000000A = {isa = XCBuildConfiguration; name = Debug; buildSettings = {
+   ARCHS = x86_64; SDKROOT = macosx; MACOSX_DEPLOYMENT_TARGET = 11.0;
+   HEADER_SEARCH_PATHS = ("$(SRCROOT)", "$(SRCROOT)/CirrusAudioFixup",);
+   KERNEL_EXTENSION_HEADER_SEARCH_PATHS = "$(SRCROOT)/MacKernelSDK/Headers";
+   KERNEL_FRAMEWORK_HEADERS = "$(SRCROOT)/MacKernelSDK/Headers";
+   LIBRARY_SEARCH_PATHS = ("$(inherited)", "$(SRCROOT)/MacKernelSDK/Library/x86_64",);
+   CODE_SIGNING_REQUIRED = NO; CODE_SIGNING_ALLOWED = NO; CODE_SIGN_IDENTITY = "";
+   GCC_ENABLE_CPP_EXCEPTIONS = NO; GCC_ENABLE_CPP_RTTI = NO; GCC_OPTIMIZATION_LEVEL = 0;
+   CLANG_CXX_LANGUAGE_STANDARD = "c++17"; GCC_GENERATE_DEBUGGING_SYMBOLS = YES; DEBUG_INFORMATION_FORMAT = dwarf;
+   INFOPLIST_FILE = KernelProbe/Info.plist; GENERATE_INFOPLIST_FILE = NO;
+   MODULE_NAME = org.research.G614JVRProbe; MODULE_START = G614JVRProbe_start; MODULE_STOP = G614JVRProbe_stop; MODULE_VERSION = 0.1.0;
+   OTHER_CFLAGS = ("-DDEBUG=1", "-DKERNEL", "-DKERNEL_PRIVATE", "-DDRIVER_PRIVATE", "-DAPPLE", "-DNeXT",);
+   OTHER_CPLUSPLUSFLAGS = "$(OTHER_CFLAGS)"; OTHER_LDFLAGS = ("-lkmod", "-lcc_kext",);
+   PRODUCT_BUNDLE_IDENTIFIER = org.research.G614JVRProbe; PRODUCT_NAME = G614JVRProbe; WRAPPER_EXTENSION = kext;
+  }; };
+  A0000000000000000000000D = {isa = XCBuildConfiguration; name = Debug; buildSettings = {ARCHS = x86_64; SDKROOT = macosx; MACOSX_DEPLOYMENT_TARGET = 11.0;}; };
+  A0000000000000000000000B = {isa = XCConfigurationList; buildConfigurations = (A0000000000000000000000D,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Debug; };
+  A0000000000000000000000C = {isa = XCConfigurationList; buildConfigurations = (A0000000000000000000000A,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Debug; };
+ };
+ rootObject = A00000000000000000000009;
+}
