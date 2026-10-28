@@ -1,6 +1,5 @@
 #include <IOKit/IOService.h>
 #include <IOKit/IOMemoryDescriptor.h>
-#include <IOKit/IOMapTypes.h>
 #include <libkern/OSAtomic.h>
 #include <libkern/c++/OSData.h>
 #include <string.h>
