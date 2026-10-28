@@ -25,7 +25,6 @@ extern "C" __attribute__((visibility("default"))) kern_return_t G614JVRProbe_sta
 extern "C" __attribute__((visibility("default"))) kern_return_t G614JVRProbe_stop(kmod_info_t*, void*) { return KERN_SUCCESS; }
 
 namespace {
-volatile SInt32 gProbeAttempted = 0;
 class EngineCleanup final {
 public:
     EngineCleanup(cirrus::transport::intel::LPSSSPIEngine& engine, g614jvr_probe::PowerGate& power) : engine_(engine), power_(power) {}
@@ -65,14 +64,10 @@ bool G614JVRProbe::start(IOService* provider) {
     setProperty("CS0_TYPE", "NATIVE");
     setProperty("CS1_TYPE", "EXTERNAL_GPIO");
     setProperty("CS1_GPIO", "GPI0:0x01D4");
-    if (!OSCompareAndSwap(0, 1, &gProbeAttempted)) {
-        setProperty("PROBE_RESULT", "ALREADY_ATTEMPTED");
-        registerService();
-        return true;
-    }
-    const IOReturn result = probeOnce(provider);
-    setProperty("PROBE_RESULT", uint64_t(uint32_t(result)), 32);
-    // Publish results; no callbacks, pending timers, or second attempts.
+    // Fail closed: the legacy interested-driver path is intentionally
+    // unreachable while power-child and GPIO power contracts are unproven.
+    // No user client or trigger exists yet, so loading is passive.
+    setProperty("PROBE_RESULT", "PASSIVE_POWER_CHILD_HOLD_UNSUPPORTED");
     registerService();
     return true;
 }

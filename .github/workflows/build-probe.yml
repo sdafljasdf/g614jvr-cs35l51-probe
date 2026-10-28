@@ -29,6 +29,7 @@ jobs:
           python3 Tests/Transport/check_spi_gpio.py
           python3 Tests/Probe/check_power_lifecycle.py
           python3 Tests/Probe/check_deadline_counterexamples.py
+          python3 Tests/Probe/check_passive_entry.py
       - name: Compile dedicated probe target (unpublished candidate)
         shell: bash
         run: |
