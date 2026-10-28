@@ -18,7 +18,8 @@ public:
             return kIOReturnBadArgument;
         auto* hid = OSDynamicCast(OSData, gpio->getProperty("name"));
         if (!gpio->getName() || strcmp(gpio->getName(), "GPI0") || !hid || hid->getLength() < 8 ||
-            hid->getLength() > 9 || memcmp(hid->getBytesNoCopy(), "INTC1085", 8))
+            hid->getLength() > 9 || memcmp(hid->getBytesNoCopy(), "INTC1085", 8) ||
+            (hid->getLength() == 9 && static_cast<const uint8_t*>(hid->getBytesNoCopy())[8] != 0))
             return kIOReturnUnsupported;
         if (gpio->isOpen() || !gpio->open(owner, 0, nullptr)) return kIOReturnExclusiveAccess;
         gpio_ = gpio; owner_ = owner; gpio_->retain();

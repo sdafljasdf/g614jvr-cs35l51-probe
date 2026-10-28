@@ -173,6 +173,19 @@ void cleanupRegression(unsigned kind) {
 }
 int main(int argc,char** argv) {
     if(argc==2){cleanupRegression(unsigned(argv[1][0]-'0'));return 0;}
+    // Production probe policy: a controller needing reset fails without
+    // issuing any write, while a ready controller needs no reset write.
+    {
+        Window w; w.regs[E::kReset/4]=0; E engine(w,false);
+        assert(!engine.allowsControllerReset());
+        assert(engine.initialize()==kIOReturnNotReady);
+        assert(w.writes.empty());
+    }
+    {
+        Window w; E engine(w,false); assert(engine.initialize()==0);
+        engine.shutdown();
+        for (const auto& write : w.writes) assert(write.first != E::kReset);
+    }
     // Exact identity probes, not arbitrary register scans. Evidence must retain
     // the full ten-byte frame and consume each FIFO byte exactly once.
     for (uint32_t address : {0U,4U}) {

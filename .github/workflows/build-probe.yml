@@ -25,6 +25,8 @@ jobs:
           clang++ -std=c++17 -Wall -Wextra -Werror Research/G614JVR/ChipSelectPolicyTest.cpp -o "$RUNNER_TEMP/cs-policy-test"
           "$RUNNER_TEMP/cs-policy-test"
           node --test Research/G614JVR/family_probe_policy.test.mjs
+          python3 Tests/Transport/check_intel_spi.py
+          python3 Tests/Transport/check_spi_gpio.py
       - name: Compile dedicated probe target (unpublished candidate)
         shell: bash
         run: |
@@ -36,6 +38,10 @@ jobs:
           plutil -lint "$BUNDLE/Contents/Info.plist"
           lipo "$BUNDLE/Contents/MacOS/G614JVRProbe" -verify_arch x86_64
           python3 Tools/Build/verify_kext_vtables.py "$BUNDLE/Contents/MacOS/G614JVRProbe"
+          if nm "$BUNDLE/Contents/MacOS/G614JVRProbe" | grep -E 'CirrusAudioFixup|CS35L41Driver|bringUpAmplifiers|FirmwareBundle'; then
+            echo 'Normal amplifier lifecycle symbols found in dedicated probe; fail closed.'
+            exit 1
+          fi
       - name: Enforce probe-only build gate
         run: |
           echo 'FAIL CLOSED: dedicated target is an unreviewed candidate; lifecycle and write audit remain incomplete.'

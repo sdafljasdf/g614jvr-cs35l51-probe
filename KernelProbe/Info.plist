@@ -19,6 +19,7 @@
 <key>IOKitPersonalities</key><dict><key>G614JVRProbe</key><dict>
 <key>CFBundleIdentifier</key><string>org.research.G614JVRProbe</string>
 <key>IOClass</key><string>G614JVRProbe</string>
+<key>IOMatchCategory</key><string>G614JVRProbe</string>
 <key>IOProviderClass</key><string>IOACPIPlatformDevice</string>
 <key>IONameMatch</key><string>CSC3551</string>
 <key>IOProbeScore</key><integer>1000</integer>

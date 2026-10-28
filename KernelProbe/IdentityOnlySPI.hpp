@@ -8,14 +8,18 @@
 namespace g614jvr_probe {
 class IdentityOnlySPI final {
 public:
-    struct Result { uint32_t device[2]{}, revision[2]{}; IOReturn transfer[4]{}; unsigned attempted{0}, completed{0}, reads{0}; IOReturn error{kIOReturnNotReady}; };
+    struct Result { uint32_t device[2]{}, revision[2]{}; IOReturn transfer[4]{}; unsigned attempted{0}, completed{0}, reads{0}; IOReturn error{kIOReturnNotReady}, cleanup{kIOReturnNotReady}; };
     IdentityOnlySPI(cirrus::transport::intel::LPSSSPIEngine& engine, WhitelistedCS& cs, ProbeMMIO& mmio)
         : engine_(engine), cs_(cs), mmio_(mmio) {}
     // The caller must construct engine with allowControllerReset=false and hold
     // both controller and GPIO provider ownership for this entire operation.
     Result run() {
         Result result{};
-        if (engine_.allowsControllerReset()) { result.error = kIOReturnNotPermitted; return result; }
+        if (engine_.allowsControllerReset()) {
+            result.cleanup = cs_.setSelected(false);
+            result.error = kIOReturnNotPermitted;
+            return result;
+        }
         auto status = cs_.setSelected(false);
         if (status == kIOReturnSuccess) {
             for (unsigned i = 0; i < 4; ++i) {
@@ -35,8 +39,8 @@ public:
             }
         }
         // A failed deassertion is a failure, even if the four reads succeeded.
-        const auto cleanup = cs_.setSelected(false);
-        result.error = status == kIOReturnSuccess ? cleanup : status;
+        result.cleanup = cs_.setSelected(false);
+        result.error = status == kIOReturnSuccess ? result.cleanup : status;
         return result;
     }
 private:

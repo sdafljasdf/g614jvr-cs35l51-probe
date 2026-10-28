@@ -39,15 +39,20 @@ bool G614JVRProbe::start(IOService* provider) {
     setProperty("SPI3_PROVIDER_FOUND", kOSBooleanFalse);
     setProperty("SPI3_OPEN_ATTEMPTED", kOSBooleanFalse);
     setProperty("SPI3_OPEN_SUCCESS", kOSBooleanFalse);
+    setProperty("SPI3_WAS_ALREADY_OPEN", "NOT_CHECKED");
     setProperty("SPI3_CLOSE_DONE", kOSBooleanFalse);
     setProperty("SPI_CONTROLLER_MMIO_WRITES", uint64_t(0), 64);
     setProperty("CS_GPIO_WRITES", uint64_t(0), 64);
     setProperty("CS_READ_COUNT", uint64_t(0), 32);
+    setProperty("CS_TRANSACTION_ATTEMPTS", uint64_t(0), 32);
     setProperty("AMP_REGISTER_WRITES", uint64_t(0), 32);
     setProperty("RESET_GPIO_WRITES", uint64_t(0), 32);
     setProperty("SPKR_ID_GPIO_WRITES", uint64_t(0), 32);
     setProperty("UNKNOWN_GPIO_WRITES", uint64_t(0), 32);
     setProperty("SPI_CONTROLLER_RESET_WRITES", uint64_t(0), 32);
+    setProperty("CS0_TYPE", "NATIVE");
+    setProperty("CS1_TYPE", "EXTERNAL_GPIO");
+    setProperty("CS1_GPIO", "GPI0:0x01D4");
     if (!OSCompareAndSwap(0, 1, &gProbeAttempted)) {
         setProperty("PROBE_RESULT", "ALREADY_ATTEMPTED");
         registerService();
@@ -95,6 +100,7 @@ IOReturn G614JVRProbe::probeOnce(IOService* provider) {
     engineCleanup.finish();
     setProperty("CS_READ_COUNT", uint64_t(result.reads), 32);
     setProperty("CS_TRANSACTION_ATTEMPTS", uint64_t(result.attempted), 32);
+    setProperty("CS1_DESELECT_RETURN", uint64_t(uint32_t(result.cleanup)), 32);
     for (unsigned i = 0; i < result.attempted; ++i) {
         const char* keys[] = {"CS0_DEVID_RETURN", "CS0_REVID_RETURN", "CS1_DEVID_RETURN", "CS1_REVID_RETURN"};
         setProperty(keys[i], uint64_t(uint32_t(result.transfer[i])), 32);
