@@ -42,3 +42,11 @@ Linux 要求在访问第一颗前确保外部 CS 未被选中；用户现在明�
 候选 `ProbeMMIO` 拒绝 0x204 reset 写和非白名单 controller 写，并要求 FIFO 严格匹配四个授权身份读取帧；`GPIOWindow` 和 `WhitelistedCS` 限定 GPI0:0x01D4 的 TX 位。引擎显式禁止 reset；一次启动锁存限制自动重复运行。候选用 RAII 释放资源，结束前请求 CS1 HIGH。上述是源代码审计初稿，不能证明链接后的二进制、硬件所有权或真实电平；尚需检查 CI 构建、链接产物、所有错误与清理路径。当前本轮实际硬件访问数仍为 0。
 
 AUDIT_STATUS = INCOMPLETE；CI publication gate 维持，禁止部署。普通读写路径的共享引擎虽然含 reset 支持，但候选使用禁止复位的实例且 ProbeMMIO 在最底层拒绝 0x204；需要进一步验证生成二进制和整体路径后才能将此认定为通过。
+
+## Runtime ownership candidate: unresolved power lifecycle
+
+CI run 40668057099, commit 70e609b: x86_64 kext build, vtable/symbol check, existing controller/GPIO regression checks passed; the intentional publication gate failed and no kext artifact was published. This is a build result, not a safety approval or real-device result.
+
+The new isolated service verifies the ACPI identity, checks SPI3 PCI identity/path, opens the IOPCIDevice without seize, and only then maps BAR0. An open failure returns before GPIO mapping or any explicit MMIO writes. SPI3Lease checks PCI D0 and memory decode once, but holds no IOKit power assertion/client and does not serialize the whole transaction with asynchronous power transitions. Its GPIO provider mapping has the same unresolved lifecycle concern. `open()` arbitration does not itself establish a documented persistent power-state grant; Apple IOKit guidance says hardware accesses must wait for a usable-state callback: https://developer.apple.com/library/archive/documentation/DeviceDrivers/Conceptual/IOKitFundamentals/PowerMgmt/PowerMgmt.html .
+
+Unresolved: prove usable power held across mapping, transfer, cleanup, and provider close without PCI D-state forcing, controller reset, retry or touching unrelated GPIO; establish a safe bounded cancellation/teardown path. Until then, PROBE_ONLY_PATH = INCOMPLETE and WRITE_AUDIT = INCOMPLETE. Publication gate remains active, no kext deployment or SPI transaction is authorized by this work.
