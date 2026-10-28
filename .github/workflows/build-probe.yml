@@ -28,6 +28,7 @@ jobs:
           python3 Tests/Transport/check_intel_spi.py
           python3 Tests/Transport/check_spi_gpio.py
           python3 Tests/Probe/check_power_lifecycle.py
+          python3 Tests/Probe/check_deadline_counterexamples.py
       - name: Compile dedicated probe target (unpublished candidate)
         shell: bash
         run: |
