@@ -1,0 +1,69 @@
+name: G614JVR G0 read-only observer
+on:
+  workflow_dispatch:
+  push:
+    branches: [g614jvr-cs35l51-spi]
+    paths:
+      - 'KernelGPI0Observer/**'
+      - 'G614JVRGPI0Observer.xcodeproj/**'
+      - 'Tools/GPI0Observer/**'
+      - 'Tools/Build/audit_gpi0_observer.py'
+      - 'Tests/Probe/check_g0_userclient.py'
+      - 'Tests/Probe/check_supervisor.py'
+      - '.github/workflows/build-gpi0-observer.yml'
+permissions:
+  contents: read
+jobs:
+  observer:
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: acidanthera/MacKernelSDK
+          ref: 7af1933c27aefcbdf4809ee44478829aad30f9c1
+          path: MacKernelSDK
+      - name: Test user-client lifecycle and independent sleep guard
+        run: |
+          python3 Tests/Probe/check_g0_userclient.py
+          python3 Tests/Probe/check_gpi0_observer_static.py
+          clang++ -std=c++17 -Wall -Wextra -Werror -I. Tests/Probe/gpi0_observer_test.cpp -o "$RUNNER_TEMP/g0-test"
+          "$RUNNER_TEMP/g0-test"
+          python3 Tests/Probe/check_supervisor.py
+      - name: Build isolated x86_64 observer and tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -project G614JVRGPI0Observer.xcodeproj -target G614JVRGPI0Observer -configuration Debug \
+            -sdk macosx ARCHS=x86_64 CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            CONFIGURATION_BUILD_DIR="$GITHUB_WORKSPACE/build/GPIOObserver" build
+          mkdir -p dist/G0
+          cp -R build/GPIOObserver/G614JVRGPI0Observer.kext dist/G0/G614JVR-GPI0-Observer.kext
+          clang -std=c11 -D_DARWIN_C_SOURCE -Wall -Wextra -Werror -mmacosx-version-min=12.0 -arch x86_64 -I. \
+            Tools/GPI0Observer/supervisor.c -framework CoreFoundation -framework IOKit -o dist/G0/g614jvr-probe-supervisor
+          clang -std=c11 -D_DARWIN_C_SOURCE -Wall -Wextra -Werror -mmacosx-version-min=12.0 -arch x86_64 -I. \
+            Tools/GPI0Observer/worker.c -framework CoreFoundation -framework IOKit -o dist/G0/g614jvr-gpi0-worker
+      - name: Enforce observer publication gate
+        run: |
+          plutil -lint dist/G0/G614JVR-GPI0-Observer.kext/Contents/Info.plist
+          lipo dist/G0/G614JVR-GPI0-Observer.kext/Contents/MacOS/G614JVRGPI0Observer -verify_arch x86_64
+          lipo dist/G0/g614jvr-probe-supervisor -verify_arch x86_64
+          lipo dist/G0/g614jvr-gpi0-worker -verify_arch x86_64
+          python3 Tools/Build/verify_kext_vtables.py dist/G0/G614JVR-GPI0-Observer.kext/Contents/MacOS/G614JVRGPI0Observer
+          python3 Tools/Build/audit_gpi0_observer.py dist/G0/G614JVR-GPI0-Observer.kext/Contents/MacOS/G614JVRGPI0Observer
+          cp GPI0_OBSERVER_AUDIT.md GPI0_PAD_MAPPING_AUDIT.md dist/G0/
+          git rev-parse HEAD > dist/G0/commit.txt
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          root=Path('dist/G0')
+          files=sorted(p for p in root.rglob('*') if p.is_file())
+          (root/'SHA256SUMS.txt').write_text(''.join(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.relative_to(root).as_posix()+'\n' for p in files))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: G614JVR-G0-read-only-observer-${{ github.sha }}
+          path: dist/G0/
+          if-no-files-found: error
+          retention-days: 30
