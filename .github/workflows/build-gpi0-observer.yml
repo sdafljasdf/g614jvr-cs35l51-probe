@@ -15,7 +15,7 @@ permissions:
   contents: read
 jobs:
   observer:
-    runs-on: macos-latest
+    runs-on: macos-26-intel
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
