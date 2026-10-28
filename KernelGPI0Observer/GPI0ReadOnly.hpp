@@ -19,6 +19,8 @@ inline bool sample(Reader& r, size_t length, Sample& s) {
     if (s.revid == 0xffffffffU || s.caplist == 0xffffffffU ||
         s.padbar < 0x200 || (s.padbar & 3) || s.padbar >= length) return false;
     const uint32_t revision = s.revid >> 16;
+    // Fail closed outside the feature generations audited for this observer.
+    if (revision < 0x92 || revision > 0x110) return false;
     s.stride = revision >= 0x92 ? 16 : 8;
     const uint64_t cfg = uint64_t(s.padbar) + 20U * s.stride;
     if (cfg + s.stride > length) return false;
