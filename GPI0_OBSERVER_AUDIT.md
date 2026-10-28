@@ -17,8 +17,10 @@ reads are harmless or the controller is powered.
 ## Candidate
 
 `G614JVRGPI0Observer` is a separate target and contains no GPIO or SPI write
-interface. Its `start()` publishes `PASSIVE_NO_TRIGGER`; no user client or
-other trigger exists. The unreachable private candidate method verifies the
+interface. Its `start()` publishes `PASSIVE_NO_TRIGGER`; a root-only user
+client accepts a fixed selector, but live reads are compiled out unless the
+unreviewed `G0_UNREVIEWED_LIVE_TRIGGER` flag is explicitly enabled. The service
+does not advertise `READY_G0_V1`. The candidate method verifies the
 IOService path and `INTC1085` property, requests memory index 4 of exactly
 64 KiB with `kIOMapReadOnly | kIOMapInhibitCache`, checks returned options and
 size, then uses only a const volatile 32-bit read interface. The finite
@@ -36,12 +38,16 @@ voltage or its persistence while another agent may change the pad.
 
 ## Missing gates
 
-* A user-space client draft verifies AC and lid state, requires an explicit
+* A user-space client verifies AC and lid state, requires an explicit
   protocol-ready property, obtains a temporary idle-sleep assertion and
-  releases it after a synchronous call. The current kernel exports neither
-  that property nor a user client, so this is not an operational trigger.
-  Cancellation and process-death handling do not exist; the process assertion
-  must outlive all accesses.
+  releases it after a synchronous call. The kernel does not export that
+  property or enable live reads, so this is not an operational trigger.
+  `clientClose` and `clientDied` atomically close admission and request
+  termination, while the method retains the client and owns the map locally.
+  **Unresolved:** process death can release the user-space assertion while an
+  already admitted kernel call remains active. `clientDied` does not guarantee
+  completion before the assertion disappears, and forced sleep is not blocked.
+  Controller calls and scheduling also lack an independently proven bound.
 * The private candidate method now compares both IOService and ACPI-plane
   registry paths, and requires resource 4 to have the recorded physical base
   and 64 KiB length. These are source checks only; they have not been executed
@@ -51,9 +57,10 @@ voltage or its persistence while another agent may change the pad.
   platform bus fault, forced sleep, concurrent access, or side effects on the
   actual device. The requested fixed register read semantics are supported by
   Linux usage, not independently verified on this hardware.
-* No authenticated user-client interface or cleanup under process death is
-  implemented. No publication gate has been removed. The older SPI probe's
-  separate CI gate is unchanged.
+* The root-only fixed selector exists in source but live-read dispatch is
+  disabled. Correct behavior of callbacks, memory lifetime and cleanup on a
+  real dying process is unverified. No publication gate has been removed. The
+  older SPI probe's separate CI gate is unchanged.
 
 READ_ONLY_MAPPING = REQUESTED_AND_CHECKED_IN_UNREACHABLE_SOURCE
 MAP_READ_ONLY_RUNTIME = UNKNOWN
