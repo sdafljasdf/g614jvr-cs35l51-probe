@@ -31,6 +31,9 @@ jobs:
           python3 Tests/Probe/check_deadline_counterexamples.py
           python3 Tests/Probe/check_passive_entry.py
           python3 Tests/Probe/check_gpi0_decoder.py
+          python3 Tests/Probe/check_gpi0_observer_static.py
+          clang++ -std=c++17 -Wall -Wextra -Werror -I. Tests/Probe/gpi0_observer_test.cpp -o "$RUNNER_TEMP/gpi0-observer-test"
+          "$RUNNER_TEMP/gpi0-observer-test"
       - name: Compile dedicated probe target (unpublished candidate)
         shell: bash
         run: |
@@ -46,6 +49,21 @@ jobs:
             echo 'Normal amplifier lifecycle symbols found in dedicated probe; fail closed.'
             exit 1
           fi
+      - name: Compile passive read-only GPI0 observer (unpublished candidate)
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -project G614JVRGPI0Observer.xcodeproj -target G614JVRGPI0Observer -configuration Debug \
+            -sdk macosx ARCHS=x86_64 CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            CONFIGURATION_BUILD_DIR="$GITHUB_WORKSPACE/build/GPIOObserver" build
+          BUNDLE="$GITHUB_WORKSPACE/build/GPIOObserver/G614JVRGPI0Observer.kext"
+          plutil -lint "$BUNDLE/Contents/Info.plist"
+          lipo "$BUNDLE/Contents/MacOS/G614JVRGPI0Observer" -verify_arch x86_64
+          python3 Tools/Build/verify_kext_vtables.py "$BUNDLE/Contents/MacOS/G614JVRGPI0Observer"
+          if nm "$BUNDLE/Contents/MacOS/G614JVRGPI0Observer" | grep -Ei 'OSWrite|writel|gpioWrite|setDirection|configureGPIO|CirrusAudioFixup'; then
+            echo 'Unexpected write or amplifier symbol; fail closed.'; exit 1
+          fi
+          echo 'PASSIVE ONLY: no runtime trigger, access contract or artifact publication.'
       - name: Enforce probe-only build gate
         run: |
           echo 'FAIL CLOSED: dedicated target is an unreviewed candidate; lifecycle and write audit remain incomplete.'
