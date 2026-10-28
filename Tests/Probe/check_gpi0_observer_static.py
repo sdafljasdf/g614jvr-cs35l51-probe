@@ -13,6 +13,10 @@ for forbidden in ('OSWrite', 'writel(', 'gpioWrite', 'setDirection', 'configureG
     assert forbidden not in cpp + header, forbidden
 start = cpp.split('bool G614JVRGPI0Observer::start(', 1)[1].split('IOReturn G614JVRGPI0Observer::observe(', 1)[0]
 assert not re.search(r'\bobserve\s*\(', start)
-assert 'PASSIVE_NO_TRIGGER' in start
-assert '#if defined(G0_UNREVIEWED_LIVE_TRIGGER)' in cpp
+assert 'PASSIVE_WAITING_FOR_SUPERVISED_TRIGGER' in start
+assert 'G0_UNREVIEWED_LIVE_TRIGGER' not in cpp
+assert 'args->asyncWakePort' in cpp and 'args->structureOutputDescriptor' in cpp
+assert 'MapScope mapping(map)' in cpp
+assert 'clientHasPrivilege(security, kIOClientPrivilegeAdministrator)' in cpp
+assert 'clientDied() { return clientClose(); }' in cpp
 print('PASS observer source is passive, read-only mapping requested, no listed write calls')
