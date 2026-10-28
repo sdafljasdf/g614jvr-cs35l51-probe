@@ -33,4 +33,4 @@ SPI_TRANSACTIONS = 0
 
 本机历史 DSDT SPK1 _CRS 包含 SPI DeviceSelection 0 和 1；两个输出 GPIO 资源引脚 GPI0:0x01D4 和 GPI0:0x0140，以及输入 GPI0:0x00C0。固定 Linux v6.12 10431B93 机型表指定 cs_gpio_index=0、reset_gpio_index=1、spkid_gpio_index=2；其 generic_dsd_config 在不存在设备属性时，将第一颗指定 native CS，第二颗指定该 GPIO。由此可得静态候选 CS0 native、CS1 external GPIO GPI0:0x01D4；不是当前电平、实际绑定或通信成功的实测。设备属性存在、资源或身份不匹配均须拒绝该回退。
 
-Linux 要求在访问第一颗前确保外部 CS 未被选中；用户当前限制外部 CS 只在事务期间 assert/deassert，因此不能无条件照搬初始化时预先改变 GPIO 电平。若不能只读证明其处于 inactive，应停止并报告，不得擅自切换。为模拟设计增加 ChipSelectPolicy.hpp 和测试，尚未接入 kext。
+Linux 要求在访问第一颗前确保外部 CS 未被选中；用户现在明确授权将已验证的片选 GPIO 在事务前置为 HIGH、事务中 LOW/HIGH 并在退出时恢复 HIGH。只有完成 GPI0:0x01D4 的角色和所有权验证后才可这样做。为模拟设计增加 ChipSelectPolicy.hpp 和测试，尚未接入 kext。
