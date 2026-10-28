@@ -34,6 +34,9 @@ jobs:
           python3 Tests/Probe/check_gpi0_observer_static.py
           clang++ -std=c++17 -Wall -Wextra -Werror -I. Tests/Probe/gpi0_observer_test.cpp -o "$RUNNER_TEMP/gpi0-observer-test"
           "$RUNNER_TEMP/gpi0-observer-test"
+          clang -std=c11 -Wall -Wextra -Werror -mmacosx-version-min=12.0 -arch x86_64 \
+            Tools/GPI0Observer/gpi0_observer.c -framework CoreFoundation -framework IOKit -o "$RUNNER_TEMP/gpi0-observer-client"
+          lipo "$RUNNER_TEMP/gpi0-observer-client" -verify_arch x86_64
       - name: Compile dedicated probe target (unpublished candidate)
         shell: bash
         run: |

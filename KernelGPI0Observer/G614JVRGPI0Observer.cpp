@@ -45,13 +45,17 @@ IOReturn G614JVRGPI0Observer::observe(IOService* provider) {
     auto* path = IORegistryEntry::fromPath("IOService:/AppleACPIPlatformExpert/GPI0");
     const bool same = path && path == provider;
     OSSafeReleaseNULL(path);
+    auto* acpiPath = IORegistryEntry::fromPath("IOACPIPlane:/_SB/GPI0");
+    const bool sameACPI = acpiPath && acpiPath == provider;
+    OSSafeReleaseNULL(acpiPath);
     auto* name = provider ? OSDynamicCast(OSData, provider->getProperty("name")) : nullptr;
-    if (!same || !name || name->getLength() < 8 || name->getLength() > 9 ||
+    if (!same || !sameACPI || !name || name->getLength() < 8 || name->getLength() > 9 ||
         memcmp(name->getBytesNoCopy(), "INTC1085", 8) ||
         (name->getLength() == 9 && static_cast<const uint8_t*>(name->getBytesNoCopy())[8] != 0))
         return kIOReturnUnsupported;
     auto* mem = provider->getDeviceMemoryWithIndex(4);
-    if (!mem || mem->getLength() != 0x10000) return kIOReturnNotReady;
+    if (!mem || mem->getLength() != 0x10000 || mem->getPhysicalAddress() != 0xe0690000ULL)
+        return kIOReturnNotReady;
     // Mapping may not be used unless returned options actually retain both
     // the read-only protection and requested cache-inhibited setting.
     auto* map = provider->mapDeviceMemoryWithIndex(4, kIOMapReadOnly | kIOMapInhibitCache);
@@ -68,6 +72,8 @@ IOReturn G614JVRGPI0Observer::observe(IOService* provider) {
     if (!success) return kIOReturnNotReadable;
     // Values remain raw: physical deselection and persistence are not inferred.
     setProperty("MAP_OPTIONS", uint64_t(options), 32);
+    setProperty("RESOURCE4_PHYS", uint64_t(0xe0690000ULL), 64);
+    setProperty("RESOURCE4_LENGTH", uint64_t(0x10000), 32);
     setProperty("REVID", uint64_t(s.revid), 32); setProperty("CAPLIST", uint64_t(s.caplist), 32);
     setProperty("PADBAR", uint64_t(s.padbar), 32); setProperty("PAD_STRIDE", uint64_t(s.stride), 32);
     setProperty("PADCFG_OFFSET", uint64_t(s.cfgOffset), 32);

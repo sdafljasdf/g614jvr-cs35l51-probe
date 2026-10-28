@@ -36,12 +36,16 @@ voltage or its persistence while another agent may change the pad.
 
 ## Missing gates
 
-* A supported trigger, user process idle-sleep assertion and deterministic
-  cancellation/termination handling do not exist; they must not be inferred
-  from the candidate method. The process assertion must outlive all accesses.
-* This candidate verifies an IOService path, not the requested independent
-  exact ACPI-plane path or live `_CRS` descriptor validation; provider and
-  resource identity require further work.
+* A user-space client draft verifies AC and lid state, requires an explicit
+  protocol-ready property, obtains a temporary idle-sleep assertion and
+  releases it after a synchronous call. The current kernel exports neither
+  that property nor a user client, so this is not an operational trigger.
+  Cancellation and process-death handling do not exist; the process assertion
+  must outlive all accesses.
+* The private candidate method now compares both IOService and ACPI-plane
+  registry paths, and requires resource 4 to have the recorded physical base
+  and 64 KiB length. These are source checks only; they have not been executed
+  in the kernel, and no live AML `_CRS` descriptor evaluation was done.
 * GPI0 has no confirmed macOS power-plane or access contract; even a read-only
   mapping and Linux's lack of runtime suspend callbacks cannot rule out a
   platform bus fault, forced sleep, concurrent access, or side effects on the
