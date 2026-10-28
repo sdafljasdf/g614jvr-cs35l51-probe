@@ -1,71 +1,94 @@
-# Phase G0 read-only observer candidate
+# G0 supervised read-only observer
 
-**Passive, unpublished and not ready for real hardware.** No real register
-was read and no kext was loaded or installed. This commit is a partial
-implementation, not a live G0 result.
+Scope: a controlled, one-shot observation of G614JVR `GPI0/INTC1085`,
+resource 4, GPP_D20. This artifact is a candidate for its first real read;
+compilation and tests are not evidence of a physical register value.
+The independent SPI-probe publication gate stays closed.
 
-## Source evidence
+## Passive service and fixed interface
 
-Apple SDK `IOMemoryDescriptor.h` documents `kIOMapReadOnly`, inhibited cache,
-mapping options inspection, and that the device memory descriptor is owned
-by the provider. XNU `IOMemoryDescriptor.cpp` at commit
-`f6217f891ac0bb64f3d375211650a4c1ff8ca1ea` uses read-only VM protection
-when the flag is present and avoids reusing a writable mapping for a read-only
-request. This addresses writes to that virtual mapping; it does not prove MMIO
-reads are harmless or the controller is powered.
+Loading starts no mapping or read. A root-only IOUserClient exposes selector
+0 with no input and a fixed 80-byte output structure (protocol 2). Async
+requests, scalar inputs/outputs, descriptor arguments, wrong sizes and all
+other selectors are rejected. No user mapping or arbitrary offset/address is
+provided. Each connection admits only one call; a service-wide atomic gate
+also rejects observations concurrent across connections.
 
-## Candidate
+The provider must be the same object at both exact IOService and ACPI paths,
+be an ACPI platform device named INTC1085, expose at least five memory ranges,
+and grant a normal non-seizing open. Resource 4 must match the observed
+`0xe0690000`, 65536-byte range. Failure stops before any read.
 
-`G614JVRGPI0Observer` is a separate target and contains no GPIO or SPI write
-interface. Its `start()` publishes `PASSIVE_NO_TRIGGER`; a root-only user
-client accepts a fixed selector, but live reads are compiled out unless the
-unreviewed `G0_UNREVIEWED_LIVE_TRIGGER` flag is explicitly enabled. The service
-does not advertise `READY_G0_V1`. The candidate method verifies the
-IOService path and `INTC1085` property, requests memory index 4 of exactly
-64 KiB with `kIOMapReadOnly | kIOMapInhibitCache`, checks returned options and
-size, then uses only a const volatile 32-bit read interface. The finite
-sample sequence reads REVID, CAPLIST, PADBAR, then derived PADCFG0/1 and
-specific ownership/lock words; invalid values and bounds cause failure.
-The resource-4 / GPP_D20 and revision-dependent ownership calculations are
-documented in `GPI0_PAD_MAPPING_AUDIT.md`.
+## Mapping and fixed reads
 
-Static checks and synthetic reader tests verify the sampled offsets, rejected
-PADBAR bounds, read-only options requested, absent known write symbols and
-passive entry. These checks are not a complete machine-code proof or a live
-test. On returned sample values the code records raw data only and refuses to
-claim CS1 is physically deselected; TX state alone does not guarantee pin
-voltage or its persistence while another agent may change the pad.
+Only `kIOMapReadOnly | kIOMapInhibitCache` is requested. Returned flags,
+length and virtual address are checked. No writable fallback exists. XNU's
+IOMemoryDescriptor implementation maps the read-only option to VM read
+protection and avoids substituting a writable mapping. No test write is made.
 
-## Missing gates
+A local RAII MapScope releases every successful map on all returns; it is
+destroyed before provider close and before the result is copied to the user
+buffer. The service stores a provider reference, never a mapping. Its only
+MMIO primitive dereferences a `const volatile uint32_t*` for a load, checks
+cancellation/bounds, and caps accesses at nine. The fixed sampler requests:
+REVID (0), CAPLIST (4), PADBAR (0xc), the computed PADCFG0 and PADCFG1, and
+only the target PAD_OWN, HOSTSW_OWN, PADCFGLOCK and PADCFGLOCKTX words.
+No capability chain, IRQ status, adjacent pad, retry or register scan occurs.
 
-* A user-space client verifies AC and lid state, requires an explicit
-  protocol-ready property, obtains a temporary idle-sleep assertion and
-  releases it after a synchronous call. The kernel does not export that
-  property or enable live reads, so this is not an operational trigger.
-  `clientClose` and `clientDied` atomically close admission and request
-  termination, while the method retains the client and owns the map locally.
-  **Unresolved:** process death can release the user-space assertion while an
-  already admitted kernel call remains active. `clientDied` does not guarantee
-  completion before the assertion disappears, and forced sleep is not blocked.
-  Controller calls and scheduling also lack an independently proven bound.
-* The private candidate method now compares both IOService and ACPI-plane
-  registry paths, and requires resource 4 to have the recorded physical base
-  and 64 KiB length. These are source checks only; they have not been executed
-  in the kernel, and no live AML `_CRS` descriptor evaluation was done.
-* GPI0 has no confirmed macOS power-plane or access contract; even a read-only
-  mapping and Linux's lack of runtime suspend callbacks cannot rule out a
-  platform bus fault, forced sleep, concurrent access, or side effects on the
-  actual device. The requested fixed register read semantics are supported by
-  Linux usage, not independently verified on this hardware.
-* The root-only fixed selector exists in source but live-read dispatch is
-  disabled. Correct behavior of callbacks, memory lifetime and cleanup on a
-  real dying process is unverified. No publication gate has been removed. The
-  older SPI probe's separate CI gate is unchanged.
+The pinned Linux layout is documented in `GPI0_PAD_MAPPING_AUDIT.md`.
+Revisions outside 0x92..0x110 fail closed; the decoded Linux feature selects
+16-byte pad stride and the revision-dependent ownership layout. PADBAR must
+be aligned, at least 0x200, and every derived access must fit the resource.
+The worker reports partial read count and failure status without treating
+partial samples as valid pad state.
 
-READ_ONLY_MAPPING = REQUESTED_AND_CHECKED_IN_UNREACHABLE_SOURCE
-MAP_READ_ONLY_RUNTIME = UNKNOWN
-GPI0_WRITES = 0 (static candidate path; no live access)
-REAL_GPIO_READ_OCCURRED = NO
-REAL_SPI_READ_OCCURRED = NO
-CS1_DESELECTED_NOW = UNKNOWN
-PUBLICATION = BLOCKED
+## Close, death and finite sleep guard
+
+Client close/death atomically closes admission. If a method is active, client
+termination is deferred until that method has returned from the local map
+scope; the method retains the client and the client retains the service.
+Per-load cancellation skips remaining reads and performs only unmapping and
+reference cleanup. There is no background kernel worker or persistent map.
+
+`g614jvr-probe-supervisor` and `g614jvr-gpi0-worker` are separate processes.
+The supervisor checks AC/open lid, creates an IOPM idle-system-sleep assertion
+with a system-enforced 30-second release timeout, and launches only its fixed
+sibling worker. A pipe token carries its PID and a 20-second worker deadline.
+The worker verifies parent identity and an active assertion under that PID
+using public IOPMCopyAssertionsByProcess, as well as AC/lid and protocol.
+It never owns the assertion. A normal successful return releases it
+immediately; worker error/crash or SIGINT/SIGTERM keeps it for a 5-second
+grace. A hung worker is terminated at 20 seconds, given that grace, and then
+killed; the assertion is released by 30 seconds even if the supervisor hangs.
+No permanent PM settings, daemon or password storage is created.
+
+This is a finite controlled experiment window, not hard real-time or forced
+sleep immunity. SIGKILL of the supervisor, lid closure, manual sleep, forced
+shutdown and thermal emergency are outside the guarantee. A pathological
+kernel/MMIO stall beyond the guard's lifetime is not made safe by a timer.
+Keep AC connected and lid open, and do not request sleep during observation.
+Unexpected resource, invalid register data or access failure stops the run.
+
+## Verification and publication
+
+* Host compilation of the actual observer source against IOKit fakes verifies
+  passive startup, root/selector/resource/map rejection, map destruction,
+  close/death during mapping, and cross-client concurrent rejection. Samples
+  in this test are allocated host memory, never physical GPIO.
+* Actual process/IOPM tests exercise successful completion, killed worker,
+  supervisor SIGTERM and hung-worker expiry. Only CI test preflight bypasses
+  AC/lid for desktop runners; published binaries contain no preflight bypass.
+* CI builds the isolated x86_64 kernel target and two tools, verifies IOKit
+  vtable pairing and forbidden write/SPI/amp symbols, runs the source gate,
+  then packages hashes and commit provenance. First real read is the next
+  validation step, not a publication prerequisite.
+
+Only the observer artifact may be injected into EFI. Never use `kmutil load`
+to install it on this system: macOS may then rebuild AuxKC. Do not alter
+NullMoth, the audio host stack, ACPI, or Windows. After the required cold
+boot, check existing drivers and graphics before triggering G0 once.
+
+Sources: Apple SDK IOService/IOUserClient/IOMemoryDescriptor/IOPMLib headers;
+XNU IOMemoryDescriptor and IOUserClient sources; pinned Linux sources in the
+mapping audit. Apple documents assertion limits at
+https://developer.apple.com/library/archive/qa/qa1340/_index.html .
