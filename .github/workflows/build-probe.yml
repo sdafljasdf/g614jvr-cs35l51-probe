@@ -22,6 +22,8 @@ jobs:
         run: |
           clang++ -std=c++17 -Wall -Wextra -Werror Research/G614JVR/ProbeSequenceTest.cpp -o "$RUNNER_TEMP/probe-test"
           "$RUNNER_TEMP/probe-test"
+          clang++ -std=c++17 -Wall -Wextra -Werror Research/G614JVR/ChipSelectPolicyTest.cpp -o "$RUNNER_TEMP/cs-policy-test"
+          "$RUNNER_TEMP/cs-policy-test"
           node --test Research/G614JVR/family_probe_policy.test.mjs
       - name: Enforce probe-only build gate
         run: |

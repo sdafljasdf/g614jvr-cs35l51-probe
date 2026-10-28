@@ -3,14 +3,19 @@
 #include <cstdint>
 
 namespace g614jvr_probe {
-enum class Outcome { Pass, TransferError, InvalidResponse };
+enum class Outcome { Pass, UnsafeSelectState, TransferError, InvalidResponse };
 struct EndpointResult { uint32_t device = 0; uint32_t revision = 0; bool deviceRead = false; bool revisionRead = false; };
 struct Result { Outcome outcome = Outcome::TransferError; EndpointResult endpoints[2]{}; unsigned completedReads = 0; };
 
-// Transport must implement bool readIdentity(unsigned cs, uint32_t reg, uint32_t& value).
+// Transport must first prove the external CS inactive without changing GPIO,
+// then implement bool readIdentity(unsigned cs, uint32_t reg, uint32_t& value).
 // No write interface exists here; this does not establish that a supplied transport is safe.
 template<class Transport> Result run(Transport& transport) {
     Result result{};
+    if (!transport.externalSelectProvenInactive()) {
+        result.outcome = Outcome::UnsafeSelectState;
+        return result;
+    }
     for (unsigned cs = 0; cs < 2; ++cs) {
         auto& endpoint = result.endpoints[cs];
         for (unsigned i = 0; i < 2; ++i) {

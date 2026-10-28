@@ -7,6 +7,8 @@ struct Mock {
     std::vector<std::pair<unsigned, uint32_t>> reads;
     unsigned failAt = 99, invalidAt = 99;
     uint32_t invalidValue = 0xffffffffU;
+    bool inactive = true;
+    bool externalSelectProvenInactive() const { return inactive; }
     bool readIdentity(unsigned cs, uint32_t reg, uint32_t& value) {
         reads.emplace_back(cs, reg);
         auto n = reads.size();
@@ -29,6 +31,8 @@ int main() {
     Mock ok; auto result = run(ok);
     assert(result.outcome == Outcome::Pass && result.completedReads == 4);
     assert((ok.reads == std::vector<std::pair<unsigned,uint32_t>>{{0,0},{0,4},{1,0},{1,4}}));
+    Mock unsafe; unsafe.inactive = false;
+    assert(run(unsafe).outcome == Outcome::UnsafeSelectState && unsafe.reads.empty());
     for (unsigned i=1;i<=4;++i) {
         Mock failed; failed.failAt=i; auto f=run(failed);
         assert(f.outcome == Outcome::TransferError && failed.reads.size() == i);
