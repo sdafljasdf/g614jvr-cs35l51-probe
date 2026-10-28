@@ -34,19 +34,22 @@ public:
         if (!pci->open(owner, 0, nullptr)) return kIOReturnExclusiveAccess;
         pci_ = pci; owner_ = owner; pci_->retain();
         owner->setProperty("SPI3_OPEN_SUCCESS", kOSBooleanTrue);
-        // Never change PCI power or command bits. If firmware did not leave
-        // the function in D0 with memory decoding enabled, stop safely.
+        return kIOReturnSuccess; // no mapping or MMIO before power coordination
+    }
+    IOReturn mapWhenUsable() {
+        if (!pci_ || !owner_ || map_) return kIOReturnNotReady;
+        // Caller must hold the PM gate and have confirmed a usable state.
+        // Never change PCI power or command bits.
         uint8_t pmOffset = 0;
         (void)pci_->findPCICapability(kIOPCIPowerManagementCapability, &pmOffset);
         const uint16_t command = pci_->configRead16(kIOPCIConfigCommand);
         if (!pmOffset || pmOffset > 0xf8 || command == 0xffff || !(command & 2U) ||
             (pci_->configRead16(uint8_t(pmOffset + 4)) & 3U) != 0) {
-            release();
             return kIOReturnNotReady;
         }
         map_ = pci_->mapDeviceMemoryWithRegister(kIOPCIConfigBaseAddress0);
         if (!map_ || map_->getLength() < 0x300 || !map_->getVirtualAddress()) {
-            release();
+            if (map_) { map_->release(); map_ = nullptr; }
             return kIOReturnNotReady;
         }
         return kIOReturnSuccess;
@@ -54,7 +57,9 @@ public:
     volatile uint8_t* address() const {
         return map_ ? reinterpret_cast<volatile uint8_t*>(map_->getVirtualAddress()) : nullptr;
     }
-    bool owned() const { return pci_ && map_; }
+    bool owned() const { return pci_ != nullptr; }
+    bool mapped() const { return pci_ && map_; }
+    IOPCIDevice* provider() const { return pci_; }
     size_t length() const { return map_ ? map_->getLength() : 0; }
     void release() {
         if (map_) { map_->release(); map_ = nullptr; }

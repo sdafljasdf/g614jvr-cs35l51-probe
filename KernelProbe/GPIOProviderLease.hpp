@@ -14,7 +14,7 @@ public:
     // Controller must already be exclusively opened. All platform and ACPI
     // GPIO descriptor checks must already have passed independently.
     IOReturn acquire(IOACPIPlatformDevice* gpio, IOService* owner, const SPI3Lease& controller, uint32_t memoryIndex) {
-        if (!gpio || !owner || gpio_ || map_ || !controller.owned() || memoryIndex != 4)
+        if (!gpio || !owner || gpio_ || map_ || !controller.mapped() || memoryIndex != 4)
             return kIOReturnBadArgument;
         auto* hid = OSDynamicCast(OSData, gpio->getProperty("name"));
         if (!gpio->getName() || strcmp(gpio->getName(), "GPI0") || !hid || hid->getLength() < 8 ||
@@ -23,15 +23,20 @@ public:
             return kIOReturnUnsupported;
         if (gpio->isOpen() || !gpio->open(owner, 0, nullptr)) return kIOReturnExclusiveAccess;
         gpio_ = gpio; owner_ = owner; gpio_->retain();
+        return kIOReturnSuccess; // mapping requires separate PM validation
+    }
+    IOReturn mapWhenUsable(uint32_t memoryIndex) {
+        if (!gpio_ || !owner_ || map_ || memoryIndex != 4) return kIOReturnNotReady;
         map_ = gpio_->mapDeviceMemoryWithIndex(memoryIndex);
         if (!map_ || !map_->getVirtualAddress() || map_->getLength() < 0x200) {
-            release();
+            if (map_) { map_->release(); map_ = nullptr; }
             return kIOReturnNotReady;
         }
         return kIOReturnSuccess;
     }
     volatile uint8_t* address() const { return map_ ? reinterpret_cast<volatile uint8_t*>(map_->getVirtualAddress()) : nullptr; }
     size_t length() const { return map_ ? map_->getLength() : 0; }
+    IOACPIPlatformDevice* provider() const { return gpio_; }
     void release() {
         if (map_) { map_->release(); map_ = nullptr; }
         if (gpio_) { gpio_->close(owner_); gpio_->release(); gpio_ = nullptr; owner_ = nullptr; }

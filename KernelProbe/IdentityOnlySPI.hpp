@@ -9,22 +9,25 @@ namespace g614jvr_probe {
 class IdentityOnlySPI final {
 public:
     struct Result { uint32_t device[2]{}, revision[2]{}; IOReturn transfer[4]{}; unsigned attempted{0}, completed{0}, reads{0}; IOReturn error{kIOReturnNotReady}, cleanup{kIOReturnNotReady}; };
-    IdentityOnlySPI(cirrus::transport::intel::LPSSSPIEngine& engine, WhitelistedCS& cs, ProbeMMIO& mmio)
-        : engine_(engine), cs_(cs), mmio_(mmio) {}
+    IdentityOnlySPI(cirrus::transport::intel::LPSSSPIEngine& engine, WhitelistedCS& cs, ProbeMMIO& mmio, PowerGate& power)
+        : engine_(engine), cs_(cs), mmio_(mmio), power_(power) {}
     // The caller must construct engine with allowControllerReset=false and hold
     // both controller and GPIO provider ownership for this entire operation.
     Result run() {
         Result result{};
         if (engine_.allowsControllerReset()) {
-            result.cleanup = cs_.setSelected(false);
             result.error = kIOReturnNotPermitted;
             return result;
         }
+        if (!power_.begin(true)) { result.error = kIOReturnNotReady; return result; }
         auto status = cs_.setSelected(false);
+        power_.end();
         if (status == kIOReturnSuccess) {
             for (unsigned i = 0; i < 4; ++i) {
+                if (!power_.begin(true)) { status = kIOReturnNotReady; break; }
                 uint32_t value = 0;
                 status = readNext(i / 2, (i & 1) ? 4 : 0, value);
+                power_.end();
                 result.attempted = index_;
                 result.transfer[i] = status;
                 if (status == kIOReturnSuccess) {
@@ -39,7 +42,10 @@ public:
             }
         }
         // A failed deassertion is a failure, even if the four reads succeeded.
-        result.cleanup = cs_.setSelected(false);
+        if (power_.begin(true)) {
+            result.cleanup = cs_.setSelected(false);
+            power_.end();
+        } // Do not touch GPIO after either power domain becomes unavailable.
         result.error = status == kIOReturnSuccess ? result.cleanup : status;
         return result;
     }
@@ -63,6 +69,7 @@ private:
     cirrus::transport::intel::LPSSSPIEngine& engine_;
     WhitelistedCS& cs_;
     ProbeMMIO& mmio_;
+    PowerGate& power_;
     unsigned index_ = 0;
     bool failed_ = false;
 };

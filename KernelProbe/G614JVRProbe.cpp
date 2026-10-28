@@ -7,14 +7,18 @@
 #include "KernelProbe/GPIOProviderLease.hpp"
 #include "KernelProbe/GPIOWindow.hpp"
 #include "KernelProbe/IdentityOnlySPI.hpp"
+#include "KernelProbe/PowerGate.hpp"
 
 class G614JVRProbe final : public IOService {
     OSDeclareDefaultStructors(G614JVRProbe)
     using super = IOService;
 public:
     bool start(IOService* provider) override;
+    IOReturn powerStateWillChangeTo(IOPMPowerFlags, unsigned long, IOService* device) override { return power_.will(device); }
+    IOReturn powerStateDidChangeTo(IOPMPowerFlags caps, unsigned long state, IOService* device) override { return power_.did(device, caps, state); }
 private:
     IOReturn probeOnce(IOService* provider);
+    g614jvr_probe::PowerGate power_{this};
 };
 OSDefineMetaClassAndStructors(G614JVRProbe, IOService)
 extern "C" __attribute__((visibility("default"))) kern_return_t G614JVRProbe_start(kmod_info_t*, void*) { return KERN_SUCCESS; }
@@ -24,12 +28,20 @@ namespace {
 volatile SInt32 gProbeAttempted = 0;
 class EngineCleanup final {
 public:
-    explicit EngineCleanup(cirrus::transport::intel::LPSSSPIEngine& engine) : engine_(engine) {}
+    EngineCleanup(cirrus::transport::intel::LPSSSPIEngine& engine, g614jvr_probe::PowerGate& power) : engine_(engine), power_(power) {}
     ~EngineCleanup() { finish(); }
-    void finish() { if (initialized_) { engine_.shutdown(); initialized_ = false; } }
+    void finish() { if (initialized_) { if (power_.begin(true)) { engine_.shutdown(); power_.end(); } else engine_.abandon(); initialized_ = false; } }
     bool initialized_ = false;
 private:
     cirrus::transport::intel::LPSSSPIEngine& engine_;
+    g614jvr_probe::PowerGate& power_;
+};
+class InterestCleanup final {
+public:
+    explicit InterestCleanup(g614jvr_probe::PowerGate& power) : power_(power) {}
+    ~InterestCleanup() { power_.close(); }
+private:
+    g614jvr_probe::PowerGate& power_;
 };
 }
 
@@ -72,29 +84,41 @@ IOReturn G614JVRProbe::probeOnce(IOService* provider) {
     auto* pciEntry = IORegistryEntry::fromPath("IOService:/AppleACPIPlatformExpert/PC00@0/AppleACPIPCI/SPI3@13");
     auto* pci = OSDynamicCast(IOPCIDevice, pciEntry);
     g614jvr_probe::SPI3Lease spi;
+    g614jvr_probe::GPIOProviderLease gpioLease;
+    InterestCleanup interests(power_); // unregister before either provider closes
     ret = spi.acquire(pci, this);
     OSSafeReleaseNULL(pciEntry);
     if (ret != kIOReturnSuccess) return ret; // no BAR or GPIO write on failed open
-    g614jvr_probe::ProbeMMIO mmio(spi.address(), spi.length(), this);
+    ret = power_.watchSPI(spi.provider());
+    if (ret != kIOReturnSuccess || !power_.begin(false, true)) return kIOReturnNotReady;
+    ret = spi.mapWhenUsable();
+    power_.end();
+    if (ret != kIOReturnSuccess) return ret;
+    setProperty("SPI3_USABLE_CONFIRMED", kOSBooleanTrue);
+    g614jvr_probe::ProbeMMIO mmio(spi.address(), spi.length(), this, power_);
     cirrus::transport::intel::LPSSSPIProfile profile{};
     if (!cirrus::transport::intel::lookupLPSSSPIProfile(0x8086, 0x7a79, profile)) return kIOReturnUnsupported;
     cirrus::transport::intel::LPSSSPIEngine engine(mmio, false); // controller reset prohibited
-    EngineCleanup engineCleanup(engine);
-    ret = engine.initialize(profile);
-    if (ret != kIOReturnSuccess) return ret;
-    engineCleanup.initialized_ = true;
+    EngineCleanup engineCleanup(engine, power_);
     auto* gpioEntry = IORegistryEntry::fromPath("IOService:/AppleACPIPlatformExpert/GPI0");
     auto* gpio = OSDynamicCast(IOACPIPlatformDevice, gpioEntry);
-    g614jvr_probe::GPIOProviderLease gpioLease;
     ret = gpioLease.acquire(gpio, this, spi, 4);
     OSSafeReleaseNULL(gpioEntry);
     if (ret != kIOReturnSuccess) return ret;
-    g614jvr_probe::GPIOWindow gpioWindow(gpioLease, this);
-    if (!gpioWindow.prepare()) return kIOReturnNotReady;
+    ret = power_.watchGPIO(gpioLease.provider());
+    if (ret != kIOReturnSuccess || !power_.begin(true, true)) return kIOReturnNotReady;
+    ret = gpioLease.mapWhenUsable(4);
+    if (ret != kIOReturnSuccess) { power_.end(); return ret; }
+    g614jvr_probe::GPIOWindow gpioWindow(gpioLease, this, power_);
+    if (!gpioWindow.prepare()) { power_.end(); return kIOReturnNotReady; }
+    ret = engine.initialize(profile);
+    if (ret != kIOReturnSuccess) { power_.end(); return ret; }
+    engineCleanup.initialized_ = true;
     g614jvr_probe::WhitelistedCS cs;
     ret = cs.bind(gpioWindow, gpioLease.length(), "\\_SB.GPI0", "INTC1085", 0x01d4);
+    power_.end();
     if (ret != kIOReturnSuccess) return ret;
-    g614jvr_probe::IdentityOnlySPI probe(engine, cs, mmio);
+    g614jvr_probe::IdentityOnlySPI probe(engine, cs, mmio, power_);
     const auto result = probe.run();
     cs.unbind();
     engineCleanup.finish();
